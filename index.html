@@ -4,7 +4,6 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#07080b" />
-<meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="description" content="House. Ara and Aperture in one phone. Local. No account." />
 <title>House</title>
 <style>
@@ -47,6 +46,9 @@
   .left { color:var(--muted); }
   .flash { color:var(--warm); min-height:1.2em; font-size:14px; }
   #log { max-height:38vh; overflow:auto; }
+  .objects { display:flex; gap:8px; margin:10px 0; flex-wrap:wrap; }
+  .obj { border:1px solid var(--line); border-radius:12px; padding:8px 12px; background:rgba(255,255,255,.02); cursor:pointer; font-size:13px; }
+  .obj.on { border-color:var(--glow); }
 </style>
 </head>
 <body>
@@ -67,12 +69,13 @@
 <noscript><p style="padding:24px;font-family:Georgia,serif">Open this file in Chrome. The chat preview does not run House.</p></noscript>
 <script>
 (function () {
-  var KEY = "house.v1";
+  var KEY = "house.v2";
   var stop = {};
   "a an the and or but if to of in on for with at from by as is was were be been being it this that i you we they my your not no just so very into about what when who how".split(" ").forEach(function (w) { stop[w] = 1; });
   var state = load();
   var view = "door";
   var note = "";
+  var walking = false;
 
   function load() {
     try {
@@ -82,10 +85,13 @@
       data.turns = data.turns || [];
       data.lessons = data.lessons || [];
       data.entries = data.entries || [];
+      data.holding = data.holding || false;
+      data.benchHasLight = data.benchHasLight || false;
+      data.memories = data.memories || [];
       return data;
     } catch (err) { return fresh(); }
   }
-  function fresh() { return { turns: [], lessons: [], entries: [], name: "" }; }
+  function fresh() { return { turns: [], lessons: [], entries: [], name: "", holding: false, benchHasLight: false, memories: [] }; }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (err) { note = "This browser blocked saving. Open in Chrome."; } }
   function esc(s) { return String(s || "").replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">"); }
   function when(ts) { try { return new Date(ts).toLocaleString(); } catch (err) { return ""; } }
@@ -131,8 +137,8 @@
   }
 
   function door() {
-    return '<section><div class="ring"></div><h1>House</h1><p class="lede">Ara and Aperture, one phone. She can say no. The room keeps what you made real. Nothing here is an account.</p>' +
-      '<button class="wing" type="button" data-act="view" data-view="ara"><b>Ara</b><span>Silver companion. Local replies. Lessons stay text.</span></button>' +
+    return '<section><div class="ring"></div><h1>House</h1><p class="lede">Ara and Aperture, one phone. She can say no. The room keeps what you made real. Nothing here is an account. Holographic silver fairy pose batch ready.</p>' +
+      '<button class="wing" type="button" data-act="view" data-view="ara"><b>Ara</b><span>Silver companion. Local replies. Lessons stay text. Objects she can take and place.</span></button>' +
       '<button class="wing" type="button" data-act="view" data-view="aperture"><b>Aperture</b><span>What became real. What you left unreal on purpose.</span></button>' +
       '<a class="wing" href="https://github.com/iansparkman8/SparkXFairyOS"><b>Overlay</b><span>Android package com.sparkx.fairyos. Not inside this file.</span></a>' +
       '<a class="wing" href="https://github.com/iansparkman8/ara-born"><b>Older door</b><span>ara-born stays. This launch does not replace it.</span></a>' +
@@ -142,10 +148,15 @@
     var log = state.turns.slice(-24).map(function (t) {
       return '<div class="msg' + (t.role === "you" ? " me" : "") + '">' + esc(t.text) + '</div>';
     }).join("");
+    var walkMsg = walking ? '<p class="echo">She walks to the bench and places the light.</p>' : '';
     return '<section><p class="hint" style="letter-spacing:.14em;text-transform:uppercase">Ara · Spark Baby</p>' +
+      walkMsg +
+      '<div class="objects"><div class="obj' + (state.holding ? '' : ' on') + '" data-act="take">Shelf <span>' + (state.holding ? 'taken' : 'has light') + '</span></div>' +
+      '<div class="obj' + (state.benchHasLight ? ' on' : '') + '" data-act="place">Bench <span>' + (state.benchHasLight ? 'light stays' : 'empty') + '</span></div>' +
+      '<div class="obj" data-act="memory">Memory <span>' + state.memories.length + ' kept</span></div></div>' +
       '<div id="log">' + (log || '<p class="echo">Hand me a sentence. I don\'t see the rest of the phone.</p>') + '</div>' +
       '<div class="card"><label for="talk">Say it</label><textarea id="talk" placeholder="A sentence, or a lesson to keep."></textarea></div>' +
-      '<div class="row"><button class="primary" type="button" data-act="talk">Send</button><button class="secondary" type="button" data-act="lesson">Keep as lesson</button><button class="secondary" type="button" data-act="speak">Speak</button></div>' +
+      '<div class="row"><button class="primary" type="button" data-act="talk">Send</button><button class="secondary" type="button" data-act="lesson">Keep as lesson</button><button class="secondary" type="button" data-act="speak">Speak</button><button class="secondary" type="button" data-act="take">Take light</button><button class="secondary" type="button" data-act="place">Place light</button></div>' +
       '<p class="flash">' + esc(note) + '</p></section>';
   }
   function aperture() {
@@ -160,7 +171,8 @@
       return '<article class="entry"><time>' + esc(when(e.ts)) + '</time><p>' + esc(e.real) + '</p>' + (e.left ? '<p class="left">Left unreal: ' + esc(e.left) + '</p>' : '') + (e.echo ? '<p class="hint">Older self: ' + esc(e.echo) + '</p>' : '') + '</article>';
     }).join("");
     var lessons = state.lessons.map(function (l) { return '<article class="entry"><time>lesson</time><p>' + esc(l.title) + '</p><p class="left">' + esc(l.body) + '</p></article>'; }).join("");
-    return '<section><h1>Record</h1><p class="hint">' + state.entries.length + ' kept · ' + state.lessons.length + ' lessons · not run</p>' + (rows || '<p class="lede">Nothing kept yet.</p>') + lessons +
+    var mems = state.memories.map(function (m) { return '<article class="entry"><time>memory</time><p>' + esc(m.line) + '</p></article>'; }).join("");
+    return '<section><h1>Record</h1><p class="hint">' + state.entries.length + ' kept · ' + state.lessons.length + ' lessons · ' + state.memories.length + ' memories · not run</p>' + (rows || '<p class="lede">Nothing kept yet.</p>') + lessons + mems +
       '<div class="row"><button class="secondary" type="button" data-act="import">Import</button><button class="secondary" type="button" data-act="wipe">Erase this house</button></div>' +
       '<input id="file" type="file" accept="application/json" style="display:none"><p class="flash">' + esc(note) + '</p></section>';
   }
@@ -186,6 +198,39 @@
         state.turns.push({ role: "ara", text: araReply(text) });
       }
       save(); note = ""; view = "ara"; render(); return;
+    }
+    if (act === "take") {
+      if (!state.holding && !state.benchHasLight) {
+        state.holding = true;
+        note = "She takes the light from the shelf.";
+        save(); render();
+      }
+      return;
+    }
+    if (act === "place") {
+      if (state.holding) {
+        walking = true;
+        note = "She walks to the bench.";
+        render();
+        setTimeout(function () {
+          walking = false;
+          state.holding = false;
+          state.benchHasLight = true;
+          note = "The light stays on the bench.";
+          save();
+          render();
+        }, 900);
+      }
+      return;
+    }
+    if (act === "memory") {
+      var line = prompt("Name something to keep on the memory shelf:");
+      if (line && line.trim()) {
+        state.memories.unshift({ ts: Date.now(), line: line.trim() });
+        note = "Kept on the shelf.";
+        save(); render();
+      }
+      return;
     }
     if (act === "keep") {
       var real = (document.getElementById("real") || {}).value || "";
@@ -239,7 +284,7 @@
         var data = JSON.parse(reader.result);
         if (!data || !data.entries) throw new Error("bad");
         if (!window.confirm("Replace House on this device with the archive?")) return;
-        state = data; state.turns = state.turns || []; state.lessons = state.lessons || [];
+        state = data; state.turns = state.turns || []; state.lessons = state.lessons || []; state.memories = state.memories || [];
         save(); note = "Imported."; view = "record"; render();
       } catch (err) { note = "That file is not a House archive."; render(); }
     };
